@@ -3,171 +3,242 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Battle Pets - Sepolia</title>
+  <title>BattlePets - Web3 Game</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
-    button { margin: 5px; padding: 8px 12px; }
-    .info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    h1 { color: #2c3e50; }
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+    }
+    .info-box {
+      background: #ecf0f1;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 5px;
+    }
+    .error { color: red; }
+    .success { color: green; }
   </style>
 </head>
 <body>
-  <h1>⚔️ Battle Pets (Sepolia Testnet)</h1>
 
-  <div id="app">
-    <button id="connectBtn">🔌 连接 MetaMask</button>
-    <div id="content" style="display:none;">
-      <p><strong>钱包:</strong> <span id="account"></span></p>
-      <p><strong>荣誉点:</strong> <span id="honor">0</span></p>
+<h1>⚔️ BattlePets 链游</h1>
 
-      <div id="noPet" style="display:none;">
-        <button id="mintBtn">🐾 召唤你的战斗宠物！</button>
-      </div>
+<div id="wallet-status">未连接钱包</div>
+<div id="player-info" class="info-box" style="display:none;"></div>
 
-      <div id="petInfo" style="display:none;">
-        <h3>你的宠物 #<span id="petId"></span></h3>
-        <div class="info">
-          力量: <span id="strength">0</span> | 
-          敏捷: <span id="agility">0</span> | 
-          胜场: <span id="wins">0</span>
-        </div>
-        <button id="upgradeStr">🔺 升级力量 (10 荣誉)</button>
-        <button id="upgradeAgi">🔺 升级敏捷 (10 荣誉)</button>
-        <h4>挑战 NPC:</h4>
-        <button id="goblin">👾 Goblin</button>
-        <button id="orc">👹 Orc</button>
-        <button id="dragon">🐉 Dragon</button>
-      </div>
-    </div>
-    <p id="message" style="color:red; font-weight:bold;"></p>
-  </div>
+<button id="connectBtn">连接钱包 (MetaMask)</button>
+<button id="mintBtn" disabled>铸造你的宠物</button>
 
-  <!-- 使用 ESM 版本的 ethers.js（无 eval，兼容 CSP） -->
-  <script type="module">
-    // 从官方 CDN 导入 ESM 版本（v6）
-    import { ethers } from "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js";
+<div id="pet-section" style="display:none;">
+  <h2>你的宠物</h2>
+  <div id="pet-stats"></div>
+  <button id="upgradeStrBtn">升级力量（-10 荣誉）</button>
+  <button id="upgradeAgiBtn">升级敏捷（-10 荣誉）</button>
+</div>
 
-    // 👇 替换为你的合约地址
-    const CONTRACT_ADDRESS = "0xYourContractAddressHere0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7";
+<div id="npc-section" style="display:none;">
+  <h2>挑战 NPC</h2>
+  <button id="challengeGoblin">挑战 Goblin（奖励 5）</button>
+  <button id="challengeOrc">挑战 Orc（奖励 10）</button>
+  <button id="challengeDragon">挑战 Dragon（奖励 20）</button>
+</div>
 
-    const ABI = [
-      "function mintPet()",
-      "function getPlayerPetId(address) view returns (uint256)",
-      "function getPetStats(uint256) view returns (uint256, uint256, uint256)",
-      "function getPlayerHonor(address) view returns (uint256)",
-      "function challengeNpc(uint256)",
-      "function upgradeStrength()",
-      "function upgradeAgility()",
-      "event BattleResult(address indexed attacker, address indexed defender, bool attackerWon, uint256 reward)"
-    ];
+<div id="messages" style="margin-top: 20px;"></div>
 
-    let provider, signer, contract, account;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"" type="application/javascript"></script>
+<script>
+  // ===== 配置区 =====
+  const CONTRACT_ADDRESS = "0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7"; // ←←← 替换为你的 Sepolia 合约地址！
+  const CHAIN_ID = "0xaa36a7"; // Sepolia 的 chainId (十进制 11155111)
 
-    async function init() {
-      if (typeof window.ethereum !== 'undefined') {
-        document.getElementById('connectBtn').onclick = connect;
+  // ABI（只包含需要的方法）
+  const CONTRACT_ABI = [
+    "function mintPet()",
+    "function getPlayerPetId(address) view returns (uint256)",
+    "function getPlayerHonor(address) view returns (uint256)",
+    "function getPetStats(uint256) view returns (uint256 strength, uint256 agility, uint256 wins)",
+    "function getPetLimits(uint256) view returns (uint256 maxStrength, uint256 maxAgility)",
+    "function upgradeStrength()",
+    "function upgradeAgility()",
+    "function challengeNpc(uint256 npcId)",
+    "event BattleResult(address indexed attacker, address indexed defender, bool attackerWon, uint256 reward)"
+  ];
+
+  // 全局变量
+  let provider, signer, contract, account;
+
+  // DOM 元素
+  const walletStatusEl = document.getElementById("wallet-status");
+  const playerInfoEl = document.getElementById("player-info");
+  const petSectionEl = document.getElementById("pet-section");
+  const petStatsEl = document.getElementById("pet-stats");
+  const npcSectionEl = document.getElementById("npc-section");
+  const messagesEl = document.getElementById("messages");
+
+  // 工具函数：显示消息
+  function showMessage(text, isError = false) {
+    const div = document.createElement("div");
+    div.className = isError ? "error" : "success";
+    div.innerText = text;
+    messagesEl.appendChild(div);
+    setTimeout(() => div.remove(), 5000);
+  }
+
+  // 初始化
+  async function init() {
+    if (typeof window.ethereum !== "undefined") {
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      await checkNetworkAndAccount();
+    } else {
+      showMessage("请安装 MetaMask 钱包", true);
+    }
+  }
+
+  async function checkNetworkAndAccount() {
+    try {
+      const network = await provider.getNetwork();
+      if (network.chainId !== parseInt(CHAIN_ID, 16)) {
+        showMessage("请切换到 Sepolia 测试网", true);
+        return;
+      }
+
+      const accounts = await provider.listAccounts();
+      if (accounts.length > 0) {
+        account = accounts[0];
+        await setupContract();
+        await updateUI();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function connectWallet() {
+    try {
+      await provider.send("eth_requestAccounts", []);
+      account = (await provider.listAccounts())[0];
+      await setupContract();
+      await updateUI();
+      walletStatusEl.innerText = `已连接: ${account.substring(0,6)}...${account.substring(account.length-4)}`;
+    } catch (err) {
+      showMessage("连接钱包失败", true);
+    }
+  }
+
+  function setupContract() {
+    signer = provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+  }
+
+  async function updateUI() {
+    if (!account || !contract) return;
+
+    try {
+      const petId = await contract.getPlayerPetId(account);
+      const honor = await contract.getPlayerHonor(account);
+
+      playerInfoEl.style.display = "block";
+      playerInfoEl.innerHTML = `<strong>地址:</strong> ${account.substring(0,6)}...${account.substring(account.length-4)}<br>
+                                <strong>荣誉点数:</strong> ${honor}`;
+
+      if (petId > 0) {
+        const [strength, agility, wins] = await contract.getPetStats(petId);
+        const [maxStr, maxAgi] = await contract.getPetLimits(petId);
+        petStatsEl.innerHTML = `
+          <p><strong>宠物 ID:</strong> ${petId}</p>
+          <p><strong>力量:</strong> ${strength} / ${maxStr}</p>
+          <p><strong>敏捷:</strong> ${agility} / ${maxAgi}</p>
+          <p><strong>胜场:</strong> ${wins}</p>
+        `;
+        petSectionEl.style.display = "block";
+        npcSectionEl.style.display = "block";
+        document.getElementById("mintBtn").disabled = true;
       } else {
-        alert('请安装 MetaMask！');
+        document.getElementById("mintBtn").disabled = false;
       }
+    } catch (err) {
+      console.error(err);
+      showMessage("读取数据失败", true);
     }
+  }
 
-    async function connect() {
-      try {
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        provider = new ethers.BrowserProvider(window.ethereum);
-        signer = await provider.getSigner();
-        account = await signer.getAddress();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-        document.getElementById('account').innerText = account.slice(0,6) + '...' + account.slice(-4);
-        document.getElementById('connectBtn').style.display = 'none';
-        document.getElementById('content').style.display = 'block';
-
-        // 监听事件（ethers v6 语法）
-        contract.on("BattleResult", (attacker, defender, won, reward, event) => {
-          showMessage(`⚔️ ${won ? '胜利' : '失败'}! 获得 ${reward} 荣誉点`);
-        });
-
-        loadUserData();
-      } catch (err) {
-        console.error(err);
-        alert('连接失败');
-      }
+  // 绑定事件
+  document.getElementById("connectBtn").addEventListener("click", connectWallet);
+  document.getElementById("mintBtn").addEventListener("click", async () => {
+    try {
+      const tx = await contract.mintPet();
+      showMessage("正在铸造宠物，请等待交易确认...");
+      await tx.wait();
+      showMessage("宠物铸造成功！");
+      await updateUI();
+    } catch (err) {
+      showMessage("铸造失败: " + (err.reason || err.message), true);
     }
+  });
 
-    async function loadUserData() {
-      try {
-        const petId = await contract.getPlayerPetId(account);
-        const honor = await contract.getPlayerHonor(account);
-        document.getElementById('honor').innerText = honor.toString();
-
-        if (petId.toString() === "0") {
-          document.getElementById('noPet').style.display = 'block';
-          document.getElementById('petInfo').style.display = 'none';
-        } else {
-          document.getElementById('noPet').style.display = 'none';
-          document.getElementById('petInfo').style.display = 'block';
-          document.getElementById('petId').innerText = petId.toString();
-
-          const [str, agi, wins] = await contract.getPetStats(petId);
-          document.getElementById('strength').innerText = str.toString();
-          document.getElementById('agility').innerText = agi.toString();
-          document.getElementById('wins').innerText = wins.toString();
-        }
-      } catch (err) {
-        console.error(err);
-      }
+  document.getElementById("upgradeStrBtn").addEventListener("click", async () => {
+    try {
+      const tx = await contract.upgradeStrength();
+      await tx.wait();
+      showMessage("力量升级成功！");
+      await updateUI();
+    } catch (err) {
+      showMessage("升级失败: " + (err.reason || err.message), true);
     }
+  });
 
-    function showMessage(msg) {
-      const el = document.getElementById('message');
-      el.innerText = msg;
-      setTimeout(() => el.innerText = '', 5000);
+  document.getElementById("upgradeAgiBtn").addEventListener("click", async () => {
+    try {
+      const tx = await contract.upgradeAgility();
+      await tx.wait();
+      showMessage("敏捷升级成功！");
+      await updateUI();
+    } catch (err) {
+      showMessage("升级失败: " + (err.reason || err.message), true);
     }
+  });
 
-    window.addEventListener('load', () => {
-      init();
+  // NPC 挑战
+  document.getElementById("challengeGoblin").addEventListener("click", () => challengeNpc(0));
+  document.getElementById("challengeOrc").addEventListener("click", () => challengeNpc(1));
+  document.getElementById("challengeDragon").addEventListener("click", () => challengeNpc(2));
 
-      document.getElementById('mintBtn').onclick = async () => {
-        try {
-          const tx = await contract.mintPet();
-          await tx.wait();
-          loadUserData();
-        } catch (e) { console.error(e); }
-      };
+  async function challengeNpc(npcId) {
+    try {
+      const tx = await contract.challengeNpc(npcId);
+      showMessage("正在挑战 NPC，请等待结果...");
+      await tx.wait();
+      showMessage("挑战完成！查看荣誉点数变化。");
+      await updateUI();
+    } catch (err) {
+      showMessage("挑战失败: " + (err.reason || err.message), true);
+    }
+  }
 
-      document.getElementById('upgradeStr').onclick = async () => {
-        try {
-          const tx = await contract.upgradeStrength();
-          await tx.wait();
-          loadUserData();
-        } catch (e) { console.error(e); }
-      };
+  // 监听网络/账户切换
+  window.ethereum.on('accountsChanged', () => location.reload());
+  window.ethereum.on('chainChanged', () => location.reload());
 
-      document.getElementById('upgradeAgi').onclick = async () => {
-        try {
-          const tx = await contract.upgradeAgility();
-          await tx.wait();
-          loadUserData();
-        } catch (e) { console.error(e); }
-      };
+  // 启动
+  init();
+</script>
 
-      document.getElementById('goblin').onclick = () => challenge(0);
-      document.getElementById('orc').onclick = () => challenge(1);
-      document.getElementById('dragon').onclick = () => challenge(2);
-
-      async function challenge(npcId) {
-        try {
-          const tx = await contract.challengeNpc(npcId);
-          await tx.wait();
-          loadUserData();
-        } catch (e) { console.error(e); }
-      }
-    });
-  </script>
-
-  <p style="font-size:12px;color:#666;margin-top:30px;">
-    ℹ️ 需要 Sepolia 测试币？访问 <a href="https://sepoliafaucet.com" target="_blank">sepoliafaucet.com</a>
-  </p>
 </body>
 </html>
-
