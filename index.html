@@ -32,6 +32,13 @@
       margin: 15px 0;
       border-radius: 5px;
     }
+    input[type="text"] {
+      padding: 10px;
+      width: 60%;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
     .error { color: red; }
     .success { color: green; }
   </style>
@@ -60,15 +67,23 @@
   <button id="challengeDragon">挑战 Dragon（奖励 20）</button>
 </div>
 
+<!-- 新增：PvP 挑战区域 -->
+<div id="pvp-section" style="display:none; margin-top: 20px;">
+  <h2>⚔️ 挑战玩家</h2>
+  <input type="text" id="opponentAddress" placeholder="输入对手钱包地址（0x...）" />
+  <button id="challengePlayerBtn">发起 PvP 挑战</button>
+</div>
+
 <div id="messages" style="margin-top: 20px;"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"" type="application/javascript"></script>
+<!-- 修复：移除多余的引号 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" type="application/javascript"></script>
 <script>
   // ===== 配置区 =====
   const CONTRACT_ADDRESS = "0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7"; // ←←← 替换为你的 Sepolia 合约地址！
   const CHAIN_ID = "0xaa36a7"; // Sepolia 的 chainId (十进制 11155111)
 
-  // ABI（只包含需要的方法）
+  // ABI（只包含需要的方法）—— 补充 challenge 函数
   const CONTRACT_ABI = [
     "function mintPet()",
     "function getPlayerPetId(address) view returns (uint256)",
@@ -78,6 +93,7 @@
     "function upgradeStrength()",
     "function upgradeAgility()",
     "function challengeNpc(uint256 npcId)",
+    "function challenge(address opponent)", // ←←← 新增此行
     "event BattleResult(address indexed attacker, address indexed defender, bool attackerWon, uint256 reward)"
   ];
 
@@ -90,6 +106,7 @@
   const petSectionEl = document.getElementById("pet-section");
   const petStatsEl = document.getElementById("pet-stats");
   const npcSectionEl = document.getElementById("npc-section");
+  const pvpSectionEl = document.getElementById("pvp-section"); // ← 新增
   const messagesEl = document.getElementById("messages");
 
   // 工具函数：显示消息
@@ -169,9 +186,11 @@
         `;
         petSectionEl.style.display = "block";
         npcSectionEl.style.display = "block";
+        pvpSectionEl.style.display = "block"; // ← 显示 PvP 区域
         document.getElementById("mintBtn").disabled = true;
       } else {
         document.getElementById("mintBtn").disabled = false;
+        pvpSectionEl.style.display = "none"; // ← 隐藏 PvP
       }
     } catch (err) {
       console.error(err);
@@ -232,9 +251,49 @@
     }
   }
 
+  // === 新增：PvP 挑战逻辑 ===
+  document.getElementById("challengePlayerBtn").addEventListener("click", async () => {
+    const input = document.getElementById("opponentAddress");
+    const addr = input.value.trim();
+
+    if (!addr) {
+      showMessage("请输入对手地址", true);
+      return;
+    }
+
+    if (!ethers.utils.isAddress(addr)) {
+      showMessage("地址格式无效", true);
+      return;
+    }
+
+    if (addr.toLowerCase() === account.toLowerCase()) {
+      showMessage("不能挑战自己！", true);
+      return;
+    }
+
+    try {
+      // 可选：提前检查对方是否有宠物（提升体验）
+      const oppPetId = await contract.getPlayerPetId(addr);
+      if (oppPetId.toString() === "0") {
+        showMessage("对手还没有宠物，无法挑战！", true);
+        return;
+      }
+
+      const tx = await contract.challenge(addr);
+      showMessage("正在发起 PvP 挑战，请等待确认...");
+      await tx.wait();
+      showMessage("PvP 挑战完成！荣誉和胜场已更新。");
+      await updateUI();
+    } catch (err) {
+      showMessage("挑战失败: " + (err.reason || err.message), true);
+    }
+  });
+
   // 监听网络/账户切换
-  window.ethereum.on('accountsChanged', () => location.reload());
-  window.ethereum.on('chainChanged', () => location.reload());
+  if (window.ethereum) {
+    window.ethereum.on('accountsChanged', () => location.reload());
+    window.ethereum.on('chainChanged', () => location.reload());
+  }
 
   // 启动
   init();
