@@ -41,12 +41,14 @@
     <p id="message" style="color:red; font-weight:bold;"></p>
   </div>
 
-  <!-- 加载 ethers.js -->
-  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
-  <script>
-    // 👇 替换为你的合约地址（从 Remix 复制）
-    const CONTRACT_ADDRESS = "0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7";
-    
+  <!-- 使用 ESM 版本的 ethers.js（无 eval，兼容 CSP） -->
+  <script type="module">
+    // 从官方 CDN 导入 ESM 版本（v6）
+    import { ethers } from "https://cdn.ethers.io/lib/ethers-6.13.esm.min.js";
+
+    // 👇 替换为你的合约地址
+    const CONTRACT_ADDRESS = "0xYourContractAddressHere";
+
     const ABI = [
       "function mintPet()",
       "function getPlayerPetId(address) view returns (uint256)",
@@ -71,8 +73,8 @@
     async function connect() {
       try {
         await window.ethereum.request({ method: 'eth_requestAccounts' });
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
         account = await signer.getAddress();
         contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
@@ -80,8 +82,8 @@
         document.getElementById('connectBtn').style.display = 'none';
         document.getElementById('content').style.display = 'block';
 
-        // 监听事件
-        contract.on("BattleResult", (attacker, defender, won, reward) => {
+        // 监听事件（ethers v6 语法）
+        contract.on("BattleResult", (attacker, defender, won, reward, event) => {
           showMessage(`⚔️ ${won ? '胜利' : '失败'}! 获得 ${reward} 荣誉点`);
         });
 
@@ -122,7 +124,6 @@
       setTimeout(() => el.innerText = '', 5000);
     }
 
-    // 绑定按钮
     window.addEventListener('load', () => {
       init();
 
@@ -169,4 +170,3 @@
   </p>
 </body>
 </html>
-
