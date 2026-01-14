@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BattlePets - 链上宠物对战</title>
-  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.esm.min.js" type="module"></script>
+  <!-- ✅ 使用 UMD 版本的 ethers，自动挂载到 window.ethers -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/umd.ethers.min.js"></script>
+  <!-- ✅ 防止 favicon 404 -->
+  <link rel="icon" href="data:,">
   <style>
     body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; }
     button { margin: 10px 5px; padding: 10px 15px; font-size: 16px; }
@@ -25,11 +28,11 @@
   <button id="upgradeAgi">🏃 升级敏捷 (-10 荣誉)</button>
   <div id="info"></div>
 
-  <script type="module">
+  <script>
     // 👇 替换为你的合约地址
     const CONTRACT_ADDRESS = "0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7";
 
-    // 👇 替换为你的 ABI（从 Remix 复制）
+    // 👇 ABI（从 Remix 复制）
     const ABI = [
         {
             "inputs": [
