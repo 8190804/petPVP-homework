@@ -5,7 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BattlePets - 链上宠物对战</title>
   <!-- ✅ 使用 UMD 版本的 ethers，自动挂载到 window.ethers -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/umd.ethers.min.js"></script>
+  <script src="https://fastly.jsdelivr.net/npm/ethers@5.7.2/dist/umd.ethers.min.js"></script>
+
+   <!-- fallback 检查 -->
+  <script>
+    if (typeof ethers === 'undefined') {
+      console.error('ethers.js failed to load!');
+      alert('⚠️ 网络问题：ethers 库加载失败，请刷新或检查代理设置。');
+    }
+  </script>
+  
   <!-- ✅ 防止 favicon 404 -->
   <link rel="icon" href="data:,">
   <style>
@@ -906,4 +915,5 @@
   </script>
 </body>
 </html>
+
 
