@@ -3,217 +3,169 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BattlePets - 链上宠物对战</title>
-  
-  <!-- ✅ 使用 CSP 安全的 ESM 版本（无 eval） -->
-  <script type="module">
-    import { ethers } from "https://cdn.ethers.io/lib/ethers-5.7.esm.min.js";
-    window.ethers = ethers; // 挂载到全局以兼容后续代码
-  </script>
-
-  <!-- ✅ fallback 检查（延迟执行） -->
-  <script>
-    // 等待 ethers 加载
-    let ethersCheckInterval = setInterval(() => {
-      if (typeof window.ethers !== 'undefined') {
-        clearInterval(ethersCheckInterval);
-        console.log("✅ ethers loaded (CSP-safe):", window.ethers.version);
-      }
-    }, 100);
-
-    // 超时提示
-    setTimeout(() => {
-      if (typeof window.ethers === 'undefined') {
-        alert('⚠️ ethers 库加载失败！请检查网络或刷新页面。');
-        console.error('ethers.js failed to load (CSP or network issue)');
-      }
-    }, 5000);
-  </script>
-
-  <link rel="icon" href="data:,">
+  <title>Battle Pets - Sepolia</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; }
-    button { margin: 10px 5px; padding: 10px 15px; font-size: 16px; }
-    #info { background: #f0f0f0; padding: 15px; margin-top: 20px; border-radius: 5px; }
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+    button { margin: 5px; padding: 8px 12px; }
+    .info { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>⚔️ BattlePets 链游</h1>
-  <div id="status">请连接钱包...</div>
-  <button id="connectWallet">🔌 连接 MetaMask</button>
-  <button id="mintPet">🐣 铸造宠物</button>
-  <br/>
-  <button id="challengeNpc0">👹 挑战哥布林 (奖励: 5 荣誉)</button>
-  <button id="challengeNpc1">🧟 挑战兽人 (奖励: 10 荣誉)</button>
-  <button id="challengeNpc2">🐉 挑战巨龙 (奖励: 20 荣誉)</button>
-  <br/>
-  <button id="upgradeStr">💪 升级力量 (-10 荣誉)</button>
-  <button id="upgradeAgi">🏃 升级敏捷 (-10 荣誉)</button>
-  <div id="info"></div>
+  <h1>⚔️ Battle Pets (Sepolia Testnet)</h1>
 
-  <!-- ✅ 主逻辑必须用 module 并等待 ethers -->
-  <script type="module">
-    // 等待 window.ethers 可用
-    function waitForEthers() {
-      return new Promise(resolve => {
-        if (window.ethers) return resolve(window.ethers);
-        const check = () => {
-          if (window.ethers) {
-            clearInterval(interval);
-            resolve(window.ethers);
-          }
-        };
-        const interval = setInterval(check, 50);
-        // 防止永久等待
-        setTimeout(() => {
-          clearInterval(interval);
-          if (!window.ethers) {
-            throw new Error("ethers not loaded");
-          }
-        }, 5000);
-      });
-    }
+  <div id="app">
+    <button id="connectBtn">🔌 连接 MetaMask</button>
+    <div id="content" style="display:none;">
+      <p><strong>钱包:</strong> <span id="account"></span></p>
+      <p><strong>荣誉点:</strong> <span id="honor">0</span></p>
 
-    // 合约配置
-    const CONTRACT_ADDRESS = "0x19DE5Ff1D6D0e377E3C5762eF8B3fCaeEC0D13e7";
+      <div id="noPet" style="display:none;">
+        <button id="mintBtn">🐾 召唤你的战斗宠物！</button>
+      </div>
 
+      <div id="petInfo" style="display:none;">
+        <h3>你的宠物 #<span id="petId"></span></h3>
+        <div class="info">
+          力量: <span id="strength">0</span> | 
+          敏捷: <span id="agility">0</span> | 
+          胜场: <span id="wins">0</span>
+        </div>
+        <button id="upgradeStr">🔺 升级力量 (10 荣誉)</button>
+        <button id="upgradeAgi">🔺 升级敏捷 (10 荣誉)</button>
+        <h4>挑战 NPC:</h4>
+        <button id="goblin">👾 Goblin</button>
+        <button id="orc">👹 Orc</button>
+        <button id="dragon">🐉 Dragon</button>
+      </div>
+    </div>
+    <p id="message" style="color:red; font-weight:bold;"></p>
+  </div>
+
+  <!-- 加载 ethers.js -->
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js" type="application/javascript"></script>
+  <script>
+    // 👇 替换为你的合约地址（从 Remix 复制）
+    const CONTRACT_ADDRESS = "0xYourContractAddressHere";
+    
     const ABI = [
-        {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"address","name":"opponent","type":"address"}],"name":"challenge","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"npcId","type":"uint256"}],"name":"challengeNpc","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
-        {"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"address","name":"owner","type":"address"}],"name":"ERC721IncorrectOwner","type":"error"},
-        {"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ERC721InsufficientApproval","type":"error"},
-        {"inputs":[{"internalType":"address","name":"approver","type":"address"}],"name":"ERC721InvalidApprover","type":"error"},
-        {"inputs":[{"internalType":"address","name":"operator","type":"address"}],"name":"ERC721InvalidOperator","type":"error"},
-        {"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"ERC721InvalidOwner","type":"error"},
-        {"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"ERC721InvalidReceiver","type":"error"},
-        {"inputs":[{"internalType":"address","name":"sender","type":"address"}],"name":"ERC721InvalidSender","type":"error"},
-        {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ERC721NonexistentToken","type":"error"},
-        {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"approved","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Approval","type":"event"},
-        {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"operator","type":"address"},{"indexed":false,"internalType":"bool","name":"approved","type":"bool"}],"name":"ApprovalForAll","type":"event"},
-        {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"attacker","type":"address"},{"indexed":true,"internalType":"address","name":"defender","type":"address"},{"indexed":false,"internalType":"bool","name":"attackerWon","type":"bool"},{"indexed":false,"internalType":"uint256","name":"reward","type":"uint256"}],"name":"BattleResult","type":"event"},
-        {"inputs":[],"name":"mintPet","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"bool","name":"approved","type":"bool"}],"name":"setApprovalForAll","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"Transfer","type":"event"},
-        {"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[],"name":"upgradeAgility","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[],"name":"upgradeStrength","outputs":[],"stateMutability":"nonpayable","type":"function"},
-        {"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[],"name":"CHALLENGE_COOLDOWN","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getApproved","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"petId","type":"uint256"}],"name":"getPetLimits","outputs":[{"internalType":"uint256","name":"maxStrength","type":"uint256"},{"internalType":"uint256","name":"maxAgility","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"petId","type":"uint256"}],"name":"getPetStats","outputs":[{"internalType":"uint256","name":"strength","type":"uint256"},{"internalType":"uint256","name":"agility","type":"uint256"},{"internalType":"uint256","name":"wins","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayerHonor","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"player","type":"address"}],"name":"getPlayerPetId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"honorPoints","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"operator","type":"address"}],"name":"isApprovedForAll","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"lastNpcChallenge","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"npcs","outputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"uint256","name":"strength","type":"uint256"},{"internalType":"uint256","name":"agility","type":"uint256"},{"internalType":"uint256","name":"reward","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"ownerToPetId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"pets","outputs":[{"internalType":"uint256","name":"strength","type":"uint256"},{"internalType":"uint256","name":"agility","type":"uint256"},{"internalType":"uint256","name":"maxStrength","type":"uint256"},{"internalType":"uint256","name":"maxAgility","type":"uint256"},{"internalType":"uint256","name":"wins","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"bytes4","name":"interfaceId","type":"bytes4"}],"name":"supportsInterface","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
-        {"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-        {"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},
-        {"inputs":[],"name":"UPGRADE_AMOUNT","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
-        {"inputs":[],"name":"UPGRADE_COST","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}
+      "function mintPet()",
+      "function getPlayerPetId(address) view returns (uint256)",
+      "function getPetStats(uint256) view returns (uint256, uint256, uint256)",
+      "function getPlayerHonor(address) view returns (uint256)",
+      "function challengeNpc(uint256)",
+      "function upgradeStrength()",
+      "function upgradeAgility()",
+      "event BattleResult(address indexed attacker, address indexed defender, bool attackerWon, uint256 reward)"
     ];
 
-    let provider, signer, contract;
+    let provider, signer, contract, account;
 
-    // 初始化按钮事件（需等 DOM 和 ethers 都 ready）
-    document.addEventListener('DOMContentLoaded', async () => {
-      await waitForEthers();
+    async function init() {
+      if (typeof window.ethereum !== 'undefined') {
+        document.getElementById('connectBtn').onclick = connect;
+      } else {
+        alert('请安装 MetaMask！');
+      }
+    }
 
-      document.getElementById('connectWallet').addEventListener('click', async () => {
-        if (!window.ethereum) {
-          alert("请安装 MetaMask！");
-          return;
+    async function connect() {
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+        account = await signer.getAddress();
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+        document.getElementById('account').innerText = account.slice(0,6) + '...' + account.slice(-4);
+        document.getElementById('connectBtn').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+
+        // 监听事件
+        contract.on("BattleResult", (attacker, defender, won, reward) => {
+          showMessage(`⚔️ ${won ? '胜利' : '失败'}! 获得 ${reward} 荣誉点`);
+        });
+
+        loadUserData();
+      } catch (err) {
+        console.error(err);
+        alert('连接失败');
+      }
+    }
+
+    async function loadUserData() {
+      try {
+        const petId = await contract.getPlayerPetId(account);
+        const honor = await contract.getPlayerHonor(account);
+        document.getElementById('honor').innerText = honor.toString();
+
+        if (petId.toString() === "0") {
+          document.getElementById('noPet').style.display = 'block';
+          document.getElementById('petInfo').style.display = 'none';
+        } else {
+          document.getElementById('noPet').style.display = 'none';
+          document.getElementById('petInfo').style.display = 'block';
+          document.getElementById('petId').innerText = petId.toString();
+
+          const [str, agi, wins] = await contract.getPetStats(petId);
+          document.getElementById('strength').innerText = str.toString();
+          document.getElementById('agility').innerText = agi.toString();
+          document.getElementById('wins').innerText = wins.toString();
         }
-        try {
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          provider = new ethers.providers.Web3Provider(window.ethereum);
-          signer = provider.getSigner();
-          contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-          await updateInfo();
-          document.getElementById('status').innerText = "✅ 钱包已连接";
-        } catch (err) {
-          console.error(err);
-          alert("连接失败: " + (err.message || err));
-        }
-      });
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-      document.getElementById('mintPet').addEventListener('click', async () => {
+    function showMessage(msg) {
+      const el = document.getElementById('message');
+      el.innerText = msg;
+      setTimeout(() => el.innerText = '', 5000);
+    }
+
+    // 绑定按钮
+    window.addEventListener('load', () => {
+      init();
+
+      document.getElementById('mintBtn').onclick = async () => {
         try {
           const tx = await contract.mintPet();
           await tx.wait();
-          alert("🎉 宠物铸造成功！");
-          await updateInfo();
-        } catch (err) {
-          alert("❌ 铸造失败: " + (err.message || err));
-        }
-      });
+          loadUserData();
+        } catch (e) { console.error(e); }
+      };
 
-      for (let i = 0; i < 3; i++) {
-        document.getElementById(`challengeNpc${i}`).addEventListener('click', async () => {
-          try {
-            const tx = await contract.challengeNpc(i);
-            await tx.wait();
-            alert(`⚔️ 挑战完成！`);
-            await updateInfo();
-          } catch (err) {
-            alert("❌ 挑战失败: " + (err.message || err));
-          }
-        });
-      }
-
-      document.getElementById('upgradeStr').addEventListener('click', async () => {
+      document.getElementById('upgradeStr').onclick = async () => {
         try {
           const tx = await contract.upgradeStrength();
           await tx.wait();
-          alert("💪 力量升级成功！");
-          await updateInfo();
-        } catch (err) {
-          alert("❌ 升级失败: " + (err.message || err));
-        }
-      });
+          loadUserData();
+        } catch (e) { console.error(e); }
+      };
 
-      document.getElementById('upgradeAgi').addEventListener('click', async () => {
+      document.getElementById('upgradeAgi').onclick = async () => {
         try {
           const tx = await contract.upgradeAgility();
           await tx.wait();
-          alert("🏃 敏捷升级成功！");
-          await updateInfo();
-        } catch (err) {
-          alert("❌ 升级失败: " + (err.message || err));
-        }
-      });
-    });
+          loadUserData();
+        } catch (e) { console.error(e); }
+      };
 
-    async function updateInfo() {
-      try {
-        const addr = await signer.getAddress();
-        const petId = await contract.getPlayerPetId(addr);
-        if (petId.toString() === "0") {
-          document.getElementById('info').innerHTML = "<p>你还没有宠物！点击「铸造宠物」</p>";
-          return;
-        }
-        const [str, agi, wins] = await contract.getPetStats(petId);
-        const honor = await contract.getPlayerHonor(addr);
-        document.getElementById('info').innerHTML = `
-          <p><strong>宠物 ID:</strong> ${petId.toString()}</p>
-          <p><strong>力量:</strong> ${str.toString()} | <strong>敏捷:</strong> ${agi.toString()} | <strong>胜场:</strong> ${wins.toString()}</p>
-          <p><strong>荣誉点:</strong> ${honor.toString()}</p>
-        `;
-      } catch (err) {
-        console.error(err);
-        document.getElementById('info').innerHTML = "<p>加载数据失败</p>";
+      document.getElementById('goblin').onclick = () => challenge(0);
+      document.getElementById('orc').onclick = () => challenge(1);
+      document.getElementById('dragon').onclick = () => challenge(2);
+
+      async function challenge(npcId) {
+        try {
+          const tx = await contract.challengeNpc(npcId);
+          await tx.wait();
+          loadUserData();
+        } catch (e) { console.error(e); }
       }
-    }
+    });
   </script>
+
+  <p style="font-size:12px;color:#666;margin-top:30px;">
+    ℹ️ 需要 Sepolia 测试币？访问 <a href="https://sepoliafaucet.com" target="_blank">sepoliafaucet.com</a>
+  </p>
 </body>
 </html>
